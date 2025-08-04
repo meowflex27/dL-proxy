@@ -1,9 +1,12 @@
 {
   "name": "movie-download-proxy",
   "version": "1.0.0",
-  "main": "index.js",
-  "license": "MIT",
+  "type": "module",
+  "main": "server.js",
   "scripts": {
-    "start": "node api/download.js"
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
   }
 }
