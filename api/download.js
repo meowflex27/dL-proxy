@@ -1,7 +1,8 @@
+// api/download.js
 import https from 'https';
 import http from 'http';
 
-export default async function handler(req, res) {
+export default function downloadHandler(req, res) {
   const { video, filename = 'download.mp4' } = req.query;
 
   if (!video) {
