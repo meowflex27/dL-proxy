@@ -1,48 +1,54 @@
-// api/download.js
-import https from 'https';
-import http from 'http';
+import express from 'express';
+import fetch from 'node-fetch';
+import { URL } from 'url';
+import { pipeline } from 'stream';
+import { promisify } from 'util';
 
-export default function downloadHandler(req, res) {
-  const { video, filename = 'download.mp4' } = req.query;
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-  if (!video) {
-    return res.status(400).json({ error: 'Missing video parameter.' });
+const ALLOWED_HOSTNAME = 'valiw.hakunaymatata.com';
+const pipe = promisify(pipeline);
+
+app.get('/proxy', async (req, res) => {
+  const videoUrl = req.query.url;
+
+  if (!videoUrl) {
+    return res.status(400).json({ error: 'Missing video url' });
   }
 
-  const targetUrl = decodeURIComponent(video);
-  const isHttps = targetUrl.startsWith('https');
-  const client = isHttps ? https : http;
+  try {
+    const parsedUrl = new URL(videoUrl);
 
-  const headers = {
-    'User-Agent': req.headers['user-agent'] || 'Mozilla/5.0',
-    'Referer': 'https://valiw.hakunaymatata.com/',
-    'Origin': 'https://valiw.hakunaymatata.com',
-    'Accept': '*/*',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Connection': 'keep-alive',
-  };
-
-  if (req.headers.range) {
-    headers['Range'] = req.headers.range;
-  }
-
-  const options = { headers };
-
-  client.get(targetUrl, options, (proxyRes) => {
-    if (proxyRes.statusCode >= 400) {
-      return res.status(proxyRes.statusCode).json({ error: 'Failed to fetch video.' });
+    if (
+      parsedUrl.hostname !== ALLOWED_HOSTNAME ||
+      !parsedUrl.pathname.endsWith('.mp4')
+    ) {
+      return res.status(403).json({ error: 'URL not allowed' });
     }
 
-    res.writeHead(proxyRes.statusCode, {
-      ...proxyRes.headers,
-      'Access-Control-Allow-Origin': '*',
-      'Content-Disposition': `attachment; filename="${filename}"`,
-      'Content-Type': 'application/octet-stream',
-    });
+    const response = await fetch(videoUrl);
 
-    proxyRes.pipe(res);
-  }).on('error', (err) => {
-    console.error('Proxy download error:', err);
-    res.status(500).json({ error: 'Proxy failed.' });
-  });
-}
+    if (!response.ok) {
+      return res.status(502).json({ error: 'Failed to fetch video' });
+    }
+
+    const contentLength = response.headers.get('content-length') || '0';
+
+    // Set download headers
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Disposition', 'attachment; filename="movie.mp4"');
+    res.setHeader('Content-Length', contentLength);
+
+    // Pipe entire response (no range)
+    await pipe(response.body, res);
+
+  } catch (err) {
+    console.error('Download proxy error:', err.message);
+    res.status(500).json({ error: 'Proxy failed' });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`Download-only proxy server running on port ${PORT}`);
+});
